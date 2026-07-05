@@ -30,6 +30,7 @@ loadEnv();
 
 function killOrphanedChrome() {
   try { execSync('taskkill /F /IM chrome.exe 2>nul', { stdio: 'ignore' }); } catch {}
+  try { execSync('taskkill /F /IM chrome-headless-shell.exe 2>nul', { stdio: 'ignore' }); } catch {}
 }
 
 killOrphanedChrome();
@@ -45,13 +46,13 @@ const db = mysql.createPool({
 });
 
 console.log('Iniciando servicio de WhatsApp...');
+console.log('Si ves errores de Chrome, cierra Chrome manualmente y vuelve a intentar.\n');
 
 const client = new Client({
   authStrategy: new LocalAuth(),
   puppeteer: {
-    headless: true,
-    executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    headless: false,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
   },
 });
 
@@ -62,19 +63,24 @@ client.on('qr', (qr) => {
   console.log('============================================');
   console.log('Abre esta URL en tu navegador:');
   console.log(url);
-  console.log('\nO abrela desde:');
-  console.log('WhatsApp > 3 puntos > Dispositivos vinculados');
+  console.log('\nWhatsApp > 3 puntos > Dispositivos vinculados > Vincular');
   console.log('============================================\n');
 });
 
 client.on('ready', () => {
   console.log(' WhatsApp conectado');
-  pollQueue();
+  console.log(' IMPORTANTE: No cierres la ventana de Chrome que se abrio');
+  // Esperar 5 segundos antes de empezar a enviar
+  setTimeout(pollQueue, 5000);
 });
 
-client.on('disconnected', () => {
-  console.log(' WhatsApp desconectado');
+client.on('disconnected', (reason) => {
+  console.log(' WhatsApp desconectado:', reason);
   process.exit(0);
+});
+
+client.on('auth_failure', (msg) => {
+  console.error(' Error de autenticacion:', msg);
 });
 
 client.initialize();
@@ -88,6 +94,7 @@ async function pollQueue() {
       );
 
       for (const row of rows) {
+        await new Promise((r) => setTimeout(r, 3000));
         try {
           const chatId = `${row.telefono}@c.us`;
           await client.sendMessage(chatId, row.mensaje);
@@ -97,11 +104,22 @@ async function pollQueue() {
           );
           console.log(' Enviado a', row.telefono);
         } catch (err) {
-          await db.query(
-            'UPDATE whatsapp_queue SET error = ? WHERE id = ?',
-            [err.message, row.id]
-          );
-          console.error(' Error al enviar a', row.telefono, ':', err.message);
+          const msg = err.message || '';
+          if (msg.includes('detached Frame')) {
+            // La pagina se recargo, reintentar en la siguiente ronda
+            console.log(' Reintentando en 10s...');
+            await db.query(
+              'UPDATE whatsapp_queue SET error = NULL WHERE id = ?',
+              [row.id]
+            );
+            await new Promise((r) => setTimeout(r, 10000));
+          } else {
+            await db.query(
+              'UPDATE whatsapp_queue SET error = ? WHERE id = ?',
+              [msg, row.id]
+            );
+            console.error(' Error al enviar a', row.telefono, ':', msg);
+          }
         }
       }
     } catch (err) {
