@@ -1,0 +1,22 @@
+CREATE DATABASE IF NOT EXISTS credit_abarrotes;
+USE credit_abarrotes;
+
+CREATE TABLE clientes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nombre VARCHAR(100) NOT NULL,
+  telefono VARCHAR(20) NOT NULL,
+  saldo_actual DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE historial_transacciones (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  cliente_id INT NOT NULL,
+  tipo_movimiento ENUM('FIADO', 'ABONO', 'CANCELACION_TOTAL') NOT NULL,
+  monto DECIMAL(10,2) NOT NULL,
+  saldo_anterior DECIMAL(10,2) NOT NULL,
+  saldo_nuevo DECIMAL(10,2) NOT NULL,
+  descripcion TEXT,
+  fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE
+);
