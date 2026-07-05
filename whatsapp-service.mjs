@@ -1,7 +1,9 @@
 import mysql from 'mysql2/promise';
-import { Client, LocalAuth } from 'whatsapp-web.js';
+import pkg from 'whatsapp-web.js';
 import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
+
+const { Client, LocalAuth } = pkg;
 
 function loadEnv() {
   try {
